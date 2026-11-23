@@ -24,8 +24,9 @@ namespace p48_lessons_asp.Controllers
         private readonly ISlugService _slugService;
         private readonly IStorageService _storageService;
         private readonly IMapper _mapper;
+        private readonly ILogger<ProductsController> _logger;
 
-        public ProductsController(DataContext dataContext, IValidator<CreateProductModel> validator, ISlugService slugService, IMapper mapper, IValidator<CreateProductImageRequest> imageValidator, IStorageService storageService)
+        public ProductsController(DataContext dataContext, IValidator<CreateProductModel> validator, ISlugService slugService, IMapper mapper, IValidator<CreateProductImageRequest> imageValidator, IStorageService storageService, ILogger<ProductsController> logger)
         {
             _dataContext = dataContext;
             _validator = validator;
@@ -33,6 +34,7 @@ namespace p48_lessons_asp.Controllers
             _mapper = mapper;
             _imageValidator = imageValidator;
             _storageService = storageService;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -64,7 +66,8 @@ namespace p48_lessons_asp.Controllers
                         Message = "Ok",
                         Data = _mapper.Map<List<ProductDto>>(products)
                     }
-                ){StatusCode = 200};
+                )
+                { StatusCode = 200 };
             }
             catch (OperationCanceledException ex)
             {
@@ -91,47 +94,81 @@ namespace p48_lessons_asp.Controllers
         public async Task<IActionResult> CreateProductImage([FromForm] CreateProductImageRequest model)
         {
             var validationResult = _imageValidator.GetErrors(model);
+
             if (validationResult != null)
             {
+                _logger.LogWarning("User failed validation while create new product image");
                 return new ObjectResult(validationResult) { StatusCode = 400 };
             }
-            var product = await _dataContext.Products.FirstOrDefaultAsync(p => p.Id == model.ProductId);
-            if (product == null)
+
+            try
             {
+                var product = await _dataContext.Products
+                    .FirstOrDefaultAsync(p => p.Id == model.ProductId);
+
+                if (product == null)
+                {
+                    _logger.LogWarning("Product not found while create new product image: {id}", model.ProductId);
+
+                    return new ObjectResult(new
+                    {
+                        StatusCode = 404,
+                        Message = "Product not found"
+                    })
+                    { StatusCode = 404 };
+                }
+
+                var imageUrl = await _storageService.SaveFileAsync(
+                    nameof(Product),
+                    product.Name,
+                    model.Image);
+
+                if (string.IsNullOrEmpty(imageUrl))
+                {
+                    _logger.LogWarning("Product image not added for product: {id}", product.Id);
+
+                    return new ObjectResult(new
+                    {
+                        StatusCode = 503,
+                        Message = "Product image not added"
+                    })
+                    { StatusCode = 503 };
+                }
+
+                var productImage = new Data.Entity.ProductImage
+                {
+                    Url = imageUrl,
+                    ProductId = product.Id,
+                    Order = 0
+                };
+
+                await _dataContext.ProductImages.AddAsync(productImage);
+                await _dataContext.SaveChangesAsync();
+
+                _logger.LogInformation(
+                    "Succesfully create new product image: {id}",
+                    productImage.Id);
+
                 return new ObjectResult(new
                 {
-                    StatusCode = 404,
-                    Message = "Product not found"
+                    StatusCode = 201,
+                    Message = "Created",
+                    Data = _mapper.Map<ProductImageDto>(productImage)
                 })
-                { StatusCode = 404 };
+                { StatusCode = 201 };
             }
-            // todo: transactions
-
-            var imageUrl = await _storageService.SaveFileAsync(nameof(Product), product.Name, model.Image);
-            if (string.IsNullOrEmpty(imageUrl))
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Error while creating product image");
+
                 return new ObjectResult(new
                 {
                     StatusCode = 503,
-                    Message = "Product image not added"
+                    Message = "Service Unavailable",
+                    Data = (object)null!
                 })
                 { StatusCode = 503 };
             }
-            var productImage = new Data.Entity.ProductImage
-            {
-                Url = imageUrl,
-                ProductId = product.Id,
-                Order = 0
-            };
-            await _dataContext.ProductImages.AddAsync(productImage);
-            await _dataContext.SaveChangesAsync();
-            return new ObjectResult(new
-            {
-                StatusCode = 201,
-                Message = "Created",
-                Data = _mapper.Map<ProductImageDto>(productImage)
-            })
-            { StatusCode = 201 };
         }
 
         [HttpPost]
