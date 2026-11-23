@@ -40,8 +40,11 @@ namespace p48_lessons_asp.Controllers
         {
             try
             {
-                var products = await _dataContext.Products.ToListAsync();
-                if(products == null || products.Count == 0)
+                var products = await _dataContext.Products
+                .Include(p => p.Category)
+                .Include(p => p.ProductImages)
+                .ToListAsync();
+                if (products == null || products.Count == 0)
                 {
                     return new ObjectResult(
                         new ResponseModel<object>
@@ -55,11 +58,11 @@ namespace p48_lessons_asp.Controllers
                     };
                 }
                 return new ObjectResult(
-                    new ResponseModel<List<Data.Entity.Product>>
+                    new ResponseModel<List<ProductDto>>
                     {
                         StatusCode = 200,
                         Message = "Ok",
-                        Data = products
+                        Data = _mapper.Map<List<ProductDto>>(products)
                     }
                 ){StatusCode = 200};
             }
@@ -69,7 +72,7 @@ namespace p48_lessons_asp.Controllers
                 Console.ForegroundColor = ConsoleColor.DarkRed;
                 System.Console.WriteLine($"[CRITICAL] Cannot create new product with reason: {ex.Message} | ${DateTime.Now} | ProductsController/CreateProduct");
                 Console.ResetColor();
-                
+
 
                 return new ObjectResult(
                    new ResponseModel<object>
@@ -85,21 +88,22 @@ namespace p48_lessons_asp.Controllers
 
         [HttpPost]
         [Route("product-image")]
-        public async Task<IActionResult> CreateProductImage([FromForm]CreateProductImageRequest model)
+        public async Task<IActionResult> CreateProductImage([FromForm] CreateProductImageRequest model)
         {
             var validationResult = _imageValidator.GetErrors(model);
             if (validationResult != null)
             {
                 return new ObjectResult(validationResult) { StatusCode = 400 };
             }
-            var product = await _dataContext.Products.FirstOrDefaultAsync(p=>p.Id == model.ProductId);
-            if(product == null)
+            var product = await _dataContext.Products.FirstOrDefaultAsync(p => p.Id == model.ProductId);
+            if (product == null)
             {
                 return new ObjectResult(new
                 {
-                    StatusCode=404,
-                    Message="Product not found"
-                }) { StatusCode = 404 };
+                    StatusCode = 404,
+                    Message = "Product not found"
+                })
+                { StatusCode = 404 };
             }
             // todo: transactions
 
@@ -108,9 +112,10 @@ namespace p48_lessons_asp.Controllers
             {
                 return new ObjectResult(new
                 {
-                    StatusCode=503,
-                    Message="Product image not added"
-                }) { StatusCode = 503 };
+                    StatusCode = 503,
+                    Message = "Product image not added"
+                })
+                { StatusCode = 503 };
             }
             var productImage = new Data.Entity.ProductImage
             {
@@ -125,13 +130,14 @@ namespace p48_lessons_asp.Controllers
                 StatusCode = 201,
                 Message = "Created",
                 Data = _mapper.Map<ProductImageDto>(productImage)
-            }){StatusCode = 201};
+            })
+            { StatusCode = 201 };
         }
 
         [HttpPost]
         public async Task<IActionResult> GetNewProduct([FromBody] CreateProductModel model)
         {
-           var validationResult = await _validator.GetErrorsAsync(model);
+            var validationResult = await _validator.GetErrorsAsync(model);
             if (validationResult != null)
             {
                 return new ObjectResult(validationResult) { StatusCode = 400 };
@@ -145,17 +151,19 @@ namespace p48_lessons_asp.Controllers
                 Price = model.Price,
                 Description = model.Description
             };
-            try{
-            await _dataContext.Products.AddAsync(product);
-            await _dataContext.SaveChangesAsync();
-            return new ObjectResult(new
+            try
             {
-                StatusCode = 201,
-                Message = "Created",
-                Data = _mapper.Map<ProductDto>(product)
-            }){StatusCode = 201};
+                await _dataContext.Products.AddAsync(product);
+                await _dataContext.SaveChangesAsync();
+                return new ObjectResult(new
+                {
+                    StatusCode = 201,
+                    Message = "Created",
+                    Data = _mapper.Map<ProductDto>(product)
+                })
+                { StatusCode = 201 };
             }
-            catch(OperationCanceledException ex)
+            catch (OperationCanceledException ex)
             {
                 System.Console.WriteLine($"Created product error: {ex.Message}");
                 return new ObjectResult(new

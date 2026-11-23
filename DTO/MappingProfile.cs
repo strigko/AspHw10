@@ -8,12 +8,19 @@ public class MappingProfile : Profile
 {
     public MappingProfile()
     {
-        CreateMap<Data.Entity.Category, CategoryDto>()
-        .ForMember(dest => dest.ProductCount,
-        opt =>
-            opt.MapFrom(src => src.Products != null ? src.Products.Count() : 0));
-
-        CreateMap<Data.Entity.Product, ProductDto>();
-        CreateMap<Data.Entity.ProductImage, ProductImageDto>();
+        CreateMap<Data.Entity.Product, ProductDto>()
+    .ForMember(dest => dest.CategoryName,
+        opt => opt.MapFrom(src => src.Category != null
+            ? src.Category.Title
+            : string.Empty))
+    .ForMember(dest => dest.ImageUrl,
+        opt => opt.MapFrom(src => src.ProductImages == null
+            ? null
+            : src.ProductImages
+                .OrderBy(img => img.Order)
+                .ThenBy(img => img.CreatedAt)
+                .Select(img => img.Url)
+                .FirstOrDefault()));
+    CreateMap<Data.Entity.ProductImage, ProductImageDto>();
     }
 }
