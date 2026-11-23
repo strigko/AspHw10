@@ -167,7 +167,7 @@ namespace p48_lessons_asp.Controllers
                 { StatusCode = 503 };
             }
         }
-        
+        /*
         [HttpPost]
         [Route("create")]
         public async Task<IActionResult> CreateProduct([FromBody] CreateProductRequest? model)
@@ -246,7 +246,7 @@ namespace p48_lessons_asp.Controllers
                 };
             }
         }
-
+        */
         #region Old_example_without_db 
         /*
         private readonly IGenerator<Product> _generator;
